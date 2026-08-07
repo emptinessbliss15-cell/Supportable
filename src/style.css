@@ -1,0 +1,25 @@
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #f7f7f7;
+}
+
+.container {
+  max-width: 700px;
+  margin: 4rem auto;
+  padding: 2rem;
+}
+
+textarea {
+  width: 100%;
+  min-height: 120px;
+  margin: 1rem 0;
+  padding: 1rem;
+  font-size: 1rem;
+}
+
+button {
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  cursor: pointer;
+}
