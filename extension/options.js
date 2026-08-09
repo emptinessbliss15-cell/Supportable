@@ -1,0 +1,12 @@
+const endpoint = document.getElementById("endpoint");
+const message = document.getElementById("message");
+
+chrome.storage.local.get(["apiEndpoint"], ({ apiEndpoint }) => {
+  endpoint.value = apiEndpoint || "";
+});
+
+document.getElementById("save").addEventListener("click", async () => {
+  const apiEndpoint = endpoint.value.trim().replace(/\/$/, "");
+  await chrome.storage.local.set({ apiEndpoint });
+  message.textContent = "Saved.";
+});
