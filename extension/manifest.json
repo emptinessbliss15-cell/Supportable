@@ -7,8 +7,7 @@
     "default_title": "Supportable",
     "default_popup": "popup.html"
   },
-  "permissions": ["activeTab", "storage"],
+  "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": ["https://*.supabase.co/*"],
-  "icons": {},
   "options_page": "options.html"
 }
