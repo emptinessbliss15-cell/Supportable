@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Supportable",
+  "version": "0.1.0",
+  "description": "Capture a support request from the page you are viewing.",
+  "action": {
+    "default_title": "Supportable",
+    "default_popup": "popup.html"
+  },
+  "permissions": ["activeTab", "storage"],
+  "host_permissions": ["https://*.supabase.co/*"],
+  "icons": {},
+  "options_page": "options.html"
+}
