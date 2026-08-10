@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Supportable",
-  "version": "0.1.0",
-  "description": "Capture a support request from the page you are viewing.",
+  "version": "0.2.0",
+  "description": "Capture and submit a support request from the page you are viewing.",
   "action": {
     "default_title": "Supportable",
     "default_popup": "popup.html"
   },
   "permissions": ["activeTab", "scripting", "storage"],
-  "host_permissions": ["https://*.supabase.co/*"],
+  "host_permissions": ["https://*.supabase.co/*", "https://supportable.emptinessbliss15.workers.dev/*"],
   "options_page": "options.html"
 }
