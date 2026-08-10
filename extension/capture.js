@@ -19,17 +19,35 @@ async function loadCaptureConfig() {
   if (!targetTabId) throw new Error("No webpage tab was selected for capture.");
   status.textContent = "Ready for current webpage";
 }
-async function getTabStream() {
-  if (!targetTabId) throw new Error("No webpage tab was selected for capture.");
-  const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId });
-  return navigator.mediaDevices.getUserMedia({ audio: false, video: { mandatory: { chromeMediaSource: "tab", chromeMediaSourceId: streamId, maxFrameRate: 30 } } });
+function getTabStream() {
+  return new Promise((resolve, reject) => {
+    if (!targetTabId) return reject(new Error("No webpage tab was selected for capture."));
+    chrome.tabCapture.capture({ audio: false, video: true }, stream => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message || "Chrome could not capture the current webpage."));
+        return;
+      }
+      if (!stream) {
+        reject(new Error("Chrome did not provide a webpage capture stream. Make sure the webpage tab is active and try again."));
+        return;
+      }
+      resolve(stream);
+    });
+  });
 }
 async function start() {
   try {
+    startButton.disabled = true;
     status.textContent = "Starting webpage capture";
     screenStream = await getTabStream();
-    if (wantMic) micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    if (wantCamera) cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+    if (wantMic) {
+      try { micStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+      catch (error) { stopTracks(); throw new Error(`Microphone permission was not granted: ${error instanceof Error ? error.message : "permission denied"}`); }
+    }
+    if (wantCamera) {
+      try { cameraStream = await navigator.mediaDevices.getUserMedia({ video: true }); }
+      catch (error) { stopTracks(); throw new Error(`Camera permission was not granted: ${error instanceof Error ? error.message : "permission denied"}`); }
+    }
     const screenVideo = document.createElement("video");
     screenVideo.srcObject = screenStream; screenVideo.muted = true; await screenVideo.play();
     const cameraVideo = document.createElement("video");
@@ -55,7 +73,7 @@ async function start() {
       audioContext.createMediaStreamSource(micStream).connect(destination);
       destination.stream.getAudioTracks().forEach(track => output.addTrack(track));
     }
-    preview.srcObject = output; preview.play().catch(() => {});
+    preview.srcObject = output; await preview.play().catch(() => {});
     const mimeTypes = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
     const mimeType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type));
     recorder = new MediaRecorder(output, mimeType ? { mimeType } : undefined);
@@ -66,10 +84,10 @@ async function start() {
     screenStream.getVideoTracks()[0].addEventListener("ended", stopRecording, { once: true });
     recorder.start(1000);
     startedAt = Date.now(); timerHandle = setInterval(() => { timer.textContent = formatTime(Date.now() - startedAt); }, 250);
-    startButton.disabled = true; stopButton.disabled = false; status.textContent = "Recording webpage";
+    stopButton.disabled = false; status.textContent = "Recording webpage";
     message.textContent = cameraStream ? "Recording webpage + camera overlay" : wantMic ? "Recording webpage + microphone" : "Recording current webpage";
   } catch (error) {
-    stopTracks(); status.textContent = "Ready"; message.textContent = error instanceof Error ? error.message : "Capture could not be started.";
+    stopTracks(); status.textContent = "Ready"; startButton.disabled = false; message.textContent = error instanceof Error ? error.message : "Capture could not be started.";
   }
 }
 function stopRecording() { if (recorder && recorder.state !== "inactive") recorder.stop(); clearInterval(timerHandle); cancelAnimationFrame(animationFrame); stopButton.disabled = true; }
