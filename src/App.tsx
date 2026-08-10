@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabase";
 import { Login } from "./features/auth/Login";
-import { listSupportRequests, type SupportRequest } from "./features/requests/api";
+import { deleteSupportRequests, listSupportRequests, type SupportRequest } from "./features/requests/api";
 
 type Theme = "default" | "midnight" | "paper";
 type View = "requests" | "new";
@@ -19,6 +19,8 @@ function App() {
   const [requestsLoading, setRequestsLoading] = useState(false);
   const [requestsError, setRequestsError] = useState<string | null>(null);
   const [requests, setRequests] = useState<SupportRequest[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
   const [view, setView] = useState<View>("requests");
   const [activeTab, setActiveTab] = useState("Requests");
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem("supportable-theme") as Theme) || "default");
@@ -45,12 +47,39 @@ function App() {
   async function loadRequests() {
     if (!user) return;
     setRequestsLoading(true); setRequestsError(null);
-    try { setRequests(await listSupportRequests()); }
+    try { setRequests(await listSupportRequests()); setSelectedIds(new Set()); }
     catch (error: unknown) { setRequestsError(error instanceof Error ? error.message : "Unable to load requests."); }
     finally { setRequestsLoading(false); }
   }
   useEffect(() => { if (user) void loadRequests(); }, [user]);
   async function signOut() { await supabase.auth.signOut(); }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  }
+  function toggleAllVisible() {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      const allSelected = visibleRequests.length > 0 && visibleRequests.every((request) => next.has(request.id));
+      visibleRequests.forEach((request) => allSelected ? next.delete(request.id) : next.add(request.id));
+      return next;
+    });
+  }
+  async function deleteSelected(allVisible = false) {
+    const ids = allVisible ? visibleRequests.map((request) => request.id) : [...selectedIds];
+    if (!ids.length) return;
+    const label = allVisible ? `all ${ids.length} visible/filtered requests` : `${ids.length} selected request${ids.length === 1 ? "" : "s"}`;
+    if (!window.confirm(`Delete ${label}? This cannot be undone.`)) return;
+    setDeleting(true); setMessage("");
+    try {
+      await deleteSupportRequests(ids);
+      if (selectedRequest && ids.includes(selectedRequest.id)) setSelectedRequest(null);
+      setSelectedIds(new Set());
+      await loadRequests();
+      setMessage(`${ids.length} request${ids.length === 1 ? "" : "s"} deleted.`);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to delete requests."); }
+    finally { setDeleting(false); }
+  }
 
   async function createRequest() {
     const description = intent.trim(); if (!description || !user) return;
@@ -78,6 +107,8 @@ function App() {
     return [...filtered].sort((a, b) => { if (sort === "oldest") return a.createdAt.localeCompare(b.createdAt); if (sort === "bounty") return b.bounty - a.bounty; if (sort === "title") return a.title.localeCompare(b.title); return b.createdAt.localeCompare(a.createdAt); });
   }, [requests, search, sort, status, type]);
 
+  const allVisibleSelected = visibleRequests.length > 0 && visibleRequests.every((request) => selectedIds.has(request.id));
+
   if (loading) return <main className="app-shell loading-screen">Loading Supportable…</main>;
   if (!user) return <main className="app-shell auth-screen"><div className="auth-card"><div className="brand-mark">S</div><h1>Supportable</h1><p>Helping people find and fulfill intent.</p><Login /></div></main>;
 
@@ -91,9 +122,10 @@ function App() {
     {activeTab === "Requests" && view === "requests" ? <section className="workspace">
       <div className="page-heading"><div><h1>Requests</h1><p>Support requests, questions, bugs, and feature suggestions.</p></div><div className="heading-actions"><button className="secondary-button" type="button" onClick={() => void loadRequests()}>Refresh</button><button className="primary-button" type="button" onClick={() => { setView("new"); setMessage(""); }}>+ Request</button></div></div>
       <div className="request-toolbar"><label className="search-box"><span aria-hidden="true">⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search requests…" aria-label="Search requests" /></label><select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter by status">{statusOptions.map((option) => <option key={option} value={option}>{option === "All" ? "All statuses" : option}</option>)}</select><select value={type} onChange={(event) => setType(event.target.value)} aria-label="Filter by type">{typeOptions.map((option) => <option key={option} value={option}>{option === "All" ? "All types" : option}</option>)}</select><select value={sort} onChange={(event) => setSort(event.target.value)} aria-label="Sort requests"><option value="newest">Newest</option><option value="oldest">Oldest</option><option value="bounty">Highest bounty</option><option value="title">Title</option></select></div>
-      <div className="request-meta"><span>{requestsLoading ? "Loading requests…" : `${visibleRequests.length} request${visibleRequests.length === 1 ? "" : "s"}`}</span>{(status !== "All" || type !== "All" || search) && <button className="clear-button" type="button" onClick={() => { setSearch(""); setStatus("All"); setType("All"); }}>Clear filters</button>}</div>
+      <div className="request-meta"><label className="select-all"><input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} disabled={!visibleRequests.length || deleting} /> Select all visible</label><span>{requestsLoading ? "Loading requests…" : `${visibleRequests.length} request${visibleRequests.length === 1 ? "" : "s"}`}</span>{selectedIds.size > 0 && <><span>• {selectedIds.size} selected</span><button className="danger-button" type="button" onClick={() => void deleteSelected()} disabled={deleting}>{deleting ? "Deleting…" : `Delete selected (${selectedIds.size})`}</button></>}{visibleRequests.length > 0 && <button className="danger-button" type="button" onClick={() => void deleteSelected(true)} disabled={deleting}>Delete all visible</button>}{(status !== "All" || type !== "All" || search) && <button className="clear-button" type="button" onClick={() => { setSearch(""); setStatus("All"); setType("All"); }}>Clear filters</button>}</div>
+      {message && <div className="notice" role="status">{message}</div>}
       {requestsError && <div className="error-state" role="alert"><strong>Could not load requests.</strong><span>{requestsError}</span></div>}
-      <div className="request-list">{visibleRequests.map((request) => <button key={request.id} type="button" className="request-row" onClick={() => setSelectedRequest(request)}><div className="status-dot-wrap"><span className={`status-dot status-${request.status.toLowerCase().replaceAll(" ", "-")}`} /></div><div className="request-main"><div className="request-title-line"><strong>{request.title}</strong><span className="request-id">{request.id.slice(0, 8)}</span></div><div className="request-subline"><span>{request.application}</span><span>•</span><span>{request.requester}</span><span>•</span><span>{request.type}</span></div></div><div className="request-badges">{request.recording && <span className="badge">Recording{request.recordingPublic ? " · Public" : ""}</span>}<span className={request.compensation === "Bounty" ? "badge bounty" : "badge"}>{request.compensation === "Bounty" ? `$${request.bounty} bounty` : "Free"}</span></div><div className="request-date">{formatDate(request.createdAt)}</div></button>)}{!requestsLoading && !requestsError && visibleRequests.length === 0 && <div className="empty-state"><h2>No requests found</h2><p>{requests.length === 0 ? "Requests created through Supportable will appear here." : "Try changing the filters or search terms."}</p></div>}</div>
+      <div className="request-list">{visibleRequests.map((request) => <div key={request.id} className={selectedIds.has(request.id) ? "request-row selected" : "request-row"}><label className="request-select" onClick={(event) => event.stopPropagation()}><input type="checkbox" checked={selectedIds.has(request.id)} onChange={() => toggleSelected(request.id)} aria-label={`Select ${request.title}`} /></label><button type="button" className="request-row-content" onClick={() => setSelectedRequest(request)}><div className="status-dot-wrap"><span className={`status-dot status-${request.status.toLowerCase().replaceAll(" ", "-")}`} /></div><div className="request-main"><div className="request-title-line"><strong>{request.title}</strong><span className="request-id">{request.id.slice(0, 8)}</span></div><div className="request-subline"><span>{request.application}</span><span>•</span><span>{request.requester}</span><span>•</span><span>{request.type}</span></div></div><div className="request-badges">{request.recording && <span className="badge">Recording{request.recordingPublic ? " · Public" : ""}</span>}<span className={request.compensation === "Bounty" ? "badge bounty" : "badge"}>{request.compensation === "Bounty" ? `$${request.bounty} bounty` : "Free"}</span></div><div className="request-date">{formatDate(request.createdAt)}</div></button><button className="icon-button row-delete" type="button" onClick={() => { setSelectedIds(new Set([request.id])); void deleteSelected(); }} aria-label={`Delete ${request.title}`}>×</button></div>)}{!requestsLoading && !requestsError && visibleRequests.length === 0 && <div className="empty-state"><h2>No requests found</h2><p>{requests.length === 0 ? "Requests created through Supportable will appear here." : "Try changing the filters or search terms."}</p></div>}</div>
     </section> : activeTab === "Requests" && view === "new" ? <section className="workspace"><div className="form-card"><div className="page-heading"><div><h1>New request</h1><p>Describe what you need help with.</p></div></div><label htmlFor="intent">What are you trying to accomplish?</label><textarea id="intent" value={intent} onChange={(event) => setIntent(event.target.value)} placeholder="Describe your intent..." /><div className="form-grid"><label>Request type<select value={newType} onChange={(event) => setNewType(event.target.value)}><option value="support">Get help</option><option value="bug">Report a problem</option><option value="feature">Request a feature</option><option value="question">Ask a question</option></select></label><label>Bounty (optional)<input inputMode="decimal" value={newBounty} onChange={(event) => setNewBounty(event.target.value)} placeholder="0.00" /></label><label>Currency<select value={newBountyCurrency} onChange={(event) => setNewBountyCurrency(event.target.value)}><option>USD</option><option>CAD</option><option>EUR</option><option>GBP</option></select></label></div><div className="row-actions"><button className="secondary-button" type="button" onClick={() => setView("requests")}>Cancel</button><button className="primary-button" type="button" onClick={createRequest} disabled={!intent.trim() || creating}>{creating ? "Creating..." : "Create request"}</button></div>{message && <div className="notice">{message}</div>}</div></section> : <section className="workspace empty-workspace"><h1>{activeTab}</h1><p>This view will use the same request collection with a role-specific filter.</p></section>}
 
     {selectedRequest && <div className="modal-backdrop" role="presentation" onClick={() => setSelectedRequest(null)}><aside className="request-panel" role="dialog" aria-modal="true" aria-label="Request details" onClick={(event) => event.stopPropagation()}><div className="panel-header"><div><span className="eyebrow">{selectedRequest.id}</span><h2>{selectedRequest.title}</h2></div><button className="icon-button" type="button" onClick={() => setSelectedRequest(null)} aria-label="Close">×</button></div><div className="panel-status"><span className={`status-pill status-${selectedRequest.status.toLowerCase().replaceAll(" ", "-")}`}>{selectedRequest.status}</span><span className="badge">{selectedRequest.type}</span>{selectedRequest.compensation === "Bounty" && <span className="badge bounty">${selectedRequest.bounty} bounty</span>}</div><dl className="details-grid"><div><dt>Application</dt><dd>{selectedRequest.application}</dd></div><div><dt>Requester</dt><dd>{selectedRequest.requester}</dd></div><div><dt>Assigned</dt><dd>{selectedRequest.assignedTo ?? "Unassigned"}</dd></div><div><dt>Created</dt><dd>{formatDate(selectedRequest.createdAt)}</dd></div><div><dt>Recording</dt><dd>{selectedRequest.recording ? (selectedRequest.recordingPublic ? "Public" : "Private") : "None"}</dd></div></dl>{selectedRequest.recordingUrl && <div className="panel-section media-section"><div className="media-heading"><div><h3>Attachments & media</h3><p>Captured media for this request.</p></div><span className="badge">1 item</span></div><div className="media-card"><video className="request-video" src={selectedRequest.recordingUrl} controls playsInline preload="metadata">Your browser does not support video playback.</video><div className="media-actions"><a className="secondary-button" href={selectedRequest.recordingUrl} target="_blank" rel="noreferrer">Open media</a></div></div></div>}<div className="panel-section"><h3>Next step</h3><p>This request workspace is the handoff point for conversation, recording playback, assignment, and live support.</p><button className="primary-button" type="button">Open support session</button></div></aside></div>}
