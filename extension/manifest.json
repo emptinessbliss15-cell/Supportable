@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Supportable",
+  "version": "0.2.3",
+  "description": "Capture and submit a support request from the page you are viewing.",
+  "action": {
+    "default_title": "Supportable"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["activeTab", "scripting", "storage", "tabCapture", "sidePanel"],
+  "host_permissions": ["https://*.supabase.co/*", "https://supportable.emptinessbliss15.workers.dev/*"],
+  "side_panel": {
+    "default_path": "capture.html"
+  },
+  "options_page": "options.html"
+}
