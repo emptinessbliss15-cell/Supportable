@@ -1,6 +1,14 @@
+const SUPPORTABLE_URL = "https://supportable.emptinessbliss15.workers.dev/";
 const state = { tab: null, selectedText: "" };
 
 const $ = (id) => document.getElementById(id);
+
+function encodeRequest(request) {
+  const bytes = new TextEncoder().encode(JSON.stringify(request));
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
 
 async function loadContext() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -44,8 +52,13 @@ async function submit() {
   };
 
   await chrome.storage.local.set({ pendingSupportRequest: request });
-  $("status").textContent = "Captured";
-  $("message").textContent = "Request captured locally. API submission is next.";
+
+  const encoded = encodeRequest(request);
+  const url = `${SUPPORTABLE_URL}#support-request=${encodeURIComponent(encoded)}`;
+  await chrome.tabs.create({ url });
+
+  $("status").textContent = "Sent to Supportable";
+  $("message").textContent = "Supportable opened with your captured request.";
 }
 
 $("submit").addEventListener("click", submit);
