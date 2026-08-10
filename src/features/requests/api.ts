@@ -70,3 +70,9 @@ export async function listSupportRequests(): Promise<SupportRequest[]> {
     recordingUrl: row.recording_url,
   }));
 }
+
+export async function deleteSupportRequests(ids: string[]): Promise<void> {
+  if (!ids.length) return;
+  const { error } = await supabase.from("support_requests").delete().in("id", ids);
+  if (error) throw error;
+}
