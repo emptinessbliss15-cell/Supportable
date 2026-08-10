@@ -17,6 +17,7 @@ export type SupportRequest = {
   assignedTo: string | null;
   recording: boolean;
   recordingPublic: boolean;
+  recordingUrl: string | null;
 };
 
 type RequestRow = {
@@ -66,5 +67,6 @@ export async function listSupportRequests(): Promise<SupportRequest[]> {
     assignedTo: row.assigned?.name ?? null,
     recording: Boolean(row.recording_url),
     recordingPublic: row.recording_visibility === "public",
+    recordingUrl: row.recording_url,
   }));
 }
