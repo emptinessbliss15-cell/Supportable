@@ -32,6 +32,13 @@
       <button id="signOut" class="secondary full">Sign out</button>
       <p id="message" class="message" aria-live="polite"></p>
     </section>
+    <section id="capturePanel" hidden>
+      <video id="preview" autoplay muted playsinline></video>
+      <div id="captureTimer">00:00</div>
+      <div class="actions"><button id="startRecording">Start recording</button><button id="stopRecording" disabled>Stop recording</button></div>
+      <button id="backToRequest" class="secondary full">Back to request</button>
+      <p id="captureMessage" class="message" aria-live="polite"></p>
+    </section>
   </main>
   <script src="panel.js"></script>
 </body>
