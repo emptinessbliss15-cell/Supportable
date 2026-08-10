@@ -1,16 +1,24 @@
-const params = new URLSearchParams(location.search);
-const targetTabId = Number(params.get("tabId"));
-const wantMic = params.get("mic") === "1";
-const wantCamera = params.get("camera") === "1";
 const preview = document.getElementById("preview");
 const status = document.getElementById("status");
 const timer = document.getElementById("timer");
 const message = document.getElementById("message");
 const startButton = document.getElementById("start");
 const stopButton = document.getElementById("stop");
+let targetTabId, targetWindowId, wantMic = false, wantCamera = false;
 let screenStream, micStream, cameraStream, recorder, chunks = [], timerHandle, startedAt, animationFrame, audioContext;
 function formatTime(ms) { const seconds = Math.floor(ms / 1000); return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`; }
 function stopTracks() { for (const stream of [screenStream, micStream, cameraStream]) stream?.getTracks().forEach(track => track.stop()); audioContext?.close(); }
+async function loadCaptureConfig() {
+  const { captureConfig } = await chrome.storage.local.get("captureConfig");
+  if (captureConfig?.tabId && Date.now() - captureConfig.openedAt < 5 * 60 * 1000) {
+    targetTabId = captureConfig.tabId; targetWindowId = captureConfig.windowId; wantMic = !!captureConfig.mic; wantCamera = !!captureConfig.camera;
+  } else {
+    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    targetTabId = tab?.id; targetWindowId = tab?.windowId;
+  }
+  if (!targetTabId) throw new Error("No webpage tab was selected for capture.");
+  status.textContent = "Ready for current webpage";
+}
 async function getTabStream() {
   if (!targetTabId) throw new Error("No webpage tab was selected for capture.");
   const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId });
@@ -47,7 +55,7 @@ async function start() {
       audioContext.createMediaStreamSource(micStream).connect(destination);
       destination.stream.getAudioTracks().forEach(track => output.addTrack(track));
     }
-    preview.srcObject = screenStream; preview.play().catch(() => {});
+    preview.srcObject = output; preview.play().catch(() => {});
     const mimeTypes = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
     const mimeType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type));
     recorder = new MediaRecorder(output, mimeType ? { mimeType } : undefined);
@@ -73,11 +81,10 @@ async function saveRecording() {
   const db = await openDb(); await putAttachment(db, { ...record, blob });
   await chrome.storage.local.set({ latestCapture: record, captureReady: { id, tabId: targetTabId, type: "video", name: record.name, size: record.size, createdAt: record.createdAt } });
   status.textContent = "Recording saved";
-  message.textContent = `Saved ${record.name} (${Math.round(record.size / 1024 / 1024 * 10) / 10} MB). You can close this window and return to Supportable.`;
+  message.textContent = `Saved ${record.name} (${Math.round(record.size / 1024 / 1024 * 10) / 10} MB). You can close the side panel when finished.`;
   startButton.disabled = false; preview.srcObject = null;
-  try { await chrome.tabs.update(targetTabId, { active: true }); } catch {}
-  try { await chrome.windows.getCurrent(); window.close(); } catch {}
 }
 function openDb() { return new Promise((resolve, reject) => { const request = indexedDB.open("supportable", 1); request.onupgradeneeded = () => request.result.createObjectStore("attachments", { keyPath: "id" }); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); }); }
 function putAttachment(db, value) { return new Promise((resolve, reject) => { const tx = db.transaction("attachments", "readwrite"); tx.objectStore("attachments").put(value); tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); }); }
 startButton.addEventListener("click", start); stopButton.addEventListener("click", stopRecording); window.addEventListener("beforeunload", stopTracks);
+loadCaptureConfig().catch(error => { status.textContent = "Unable to prepare capture"; message.textContent = error instanceof Error ? error.message : "Capture could not be prepared."; });
