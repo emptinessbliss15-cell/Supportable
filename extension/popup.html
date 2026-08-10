@@ -13,27 +13,42 @@
       <span id="status" aria-live="polite">Ready</span>
     </header>
 
-    <section class="context">
-      <div id="pageTitle">Current page</div>
-      <div id="pageUrl" class="muted"></div>
+    <section id="authPanel">
+      <h2 id="authTitle">Sign in to Supportable</h2>
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="email" placeholder="you@example.com">
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" placeholder="Password">
+      <div class="actions">
+        <button id="authSubmit">Sign in</button>
+        <button id="authMode" class="secondary">Create account</button>
+      </div>
+      <p id="authMessage" class="message" aria-live="polite"></p>
     </section>
 
-    <label for="request">What do you need help with?</label>
-    <textarea id="request" rows="6" autofocus placeholder="Describe what happened or what you want to accomplish..."></textarea>
+    <section id="requestPanel" hidden>
+      <section class="context">
+        <div id="pageTitle">Current page</div>
+        <div id="pageUrl" class="muted"></div>
+      </section>
 
-    <label for="type">Request type</label>
-    <select id="type">
-      <option value="help">Get help</option>
-      <option value="problem">Report a problem</option>
-      <option value="feature">Request a feature</option>
-      <option value="opportunity">Opportunity</option>
-    </select>
+      <label for="request">What do you need help with?</label>
+      <textarea id="request" rows="6" autofocus placeholder="Describe what happened or what you want to accomplish..."></textarea>
 
-    <div class="actions">
-      <button id="submit">Submit request</button>
-      <button id="options" class="secondary">Settings</button>
-    </div>
-    <p id="message" class="message" aria-live="polite"></p>
+      <label for="type">Request type</label>
+      <select id="type">
+        <option value="help">Get help</option>
+        <option value="problem">Report a problem</option>
+        <option value="feature">Request a feature</option>
+        <option value="question">Ask a question</option>
+      </select>
+
+      <div class="actions">
+        <button id="submit">Submit request</button>
+        <button id="signOut" class="secondary">Sign out</button>
+      </div>
+      <p id="message" class="message" aria-live="polite"></p>
+    </section>
   </main>
   <script src="popup.js"></script>
 </body>
