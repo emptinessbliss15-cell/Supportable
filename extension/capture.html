@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Supportable Capture</title>
+  <link rel="stylesheet" href="capture.css">
+</head>
+<body>
+  <main>
+    <header>
+      <strong>Supportable capture</strong>
+      <span id="status">Ready</span>
+    </header>
+    <video id="preview" autoplay muted playsinline></video>
+    <div id="timer">00:00</div>
+    <div class="actions">
+      <button id="start">Start recording</button>
+      <button id="stop" disabled>Stop recording</button>
+    </div>
+    <p id="message"></p>
+  </main>
+  <script src="capture.js"></script>
+</body>
+</html>
