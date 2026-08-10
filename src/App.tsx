@@ -4,6 +4,9 @@ import { supabase } from "./lib/supabase";
 import { Login } from "./features/auth/Login";
 import { deleteSupportRequests, listSupportRequests, type SupportRequest } from "./features/requests/api";
 
+declare const __SUPPORTABLE_VERSION__: string;
+declare const __SUPPORTABLE_BUILD__: string;
+
 type Theme = "default" | "midnight" | "paper";
 type View = "requests" | "new";
 
@@ -114,7 +117,7 @@ function App() {
 
   return <main className="app-shell">
     <header className="topbar">
-      <div className="brand"><div className="brand-mark">S</div><span>Supportable</span></div>
+      <div className="brand"><div className="brand-mark">S</div><span>Supportable</span><span className="build-info" title={`Build ${__SUPPORTABLE_BUILD__}`}>v{__SUPPORTABLE_VERSION__} · {__SUPPORTABLE_BUILD__}</span></div>
       <nav className="tabs" aria-label="Supportable sections">{["Requests", "Supporting", "My Requests", "Community"].map((tab) => <button key={tab} type="button" className={activeTab === tab ? "tab active" : "tab"} onClick={() => { setActiveTab(tab); if (tab === "Requests") setView("requests"); }}>{tab}</button>)}</nav>
       <div className="account-area"><label className="theme-control">Theme<select value={theme} onChange={(event) => setTheme(event.target.value as Theme)}>{themes.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label><span className="user-email">{user.email}</span><button className="secondary-button" type="button" onClick={signOut}>Sign out</button></div>
     </header>
