@@ -1,13 +1,118 @@
-const SUPPORTABLE_URL = "https://supportable.emptinessbliss15.workers.dev/";
-const state = { tab: null, selectedText: "" };
+const SUPABASE_URL = "https://mddpfrkuquqbikffyuij.supabase.co";
+const SUPABASE_KEY = "sb_publishable_ym6b0iUPmb0i5wau4EVRxQ_6tZBfKf9";
+const state = { tab: null, selectedText: "", session: null, authMode: "login" };
 
 const $ = (id) => document.getElementById(id);
 
-function encodeRequest(request) {
-  const bytes = new TextEncoder().encode(JSON.stringify(request));
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
+async function supabaseFetch(path, options = {}) {
+  const headers = {
+    apikey: SUPABASE_KEY,
+    "Content-Type": "application/json",
+    ...(options.headers || {})
+  };
+  return fetch(`${SUPABASE_URL}${path}`, { ...options, headers });
+}
+
+function setSession(session) {
+  state.session = session;
+  if (session) {
+    chrome.storage.local.set({ supportableSession: session });
+  } else {
+    chrome.storage.local.remove("supportableSession");
+  }
+}
+
+function tokenExpired(token) {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return payload.exp * 1000 <= Date.now() + 30000;
+  } catch {
+    return true;
+  }
+}
+
+async function restoreSession() {
+  const { supportableSession } = await chrome.storage.local.get("supportableSession");
+  if (!supportableSession?.access_token) return null;
+
+  if (!tokenExpired(supportableSession.access_token)) {
+    state.session = supportableSession;
+    return supportableSession;
+  }
+
+  if (!supportableSession.refresh_token) return null;
+
+  const response = await supabaseFetch("/auth/v1/token?grant_type=refresh_token", {
+    method: "POST",
+    body: JSON.stringify({ refresh_token: supportableSession.refresh_token })
+  });
+
+  if (!response.ok) return null;
+  const refreshed = await response.json();
+  setSession(refreshed);
+  return refreshed;
+}
+
+async function authenticate() {
+  const email = $("email").value.trim();
+  const password = $("password").value;
+  if (!email || !password) {
+    $("authMessage").textContent = "Email and password are required.";
+    return;
+  }
+
+  $("authSubmit").disabled = true;
+  $("authMessage").textContent = "Working...";
+
+  try {
+    const path = state.authMode === "login"
+      ? "/auth/v1/token?grant_type=password"
+      : "/auth/v1/signup";
+
+    const response = await supabaseFetch(path, {
+      method: "POST",
+      body: JSON.stringify({ email, password })
+    });
+    const result = await response.json();
+
+    if (!response.ok) throw new Error(result.error_description || result.msg || result.message || "Authentication failed.");
+
+    if (state.authMode === "signup" && !result.access_token) {
+      $("authMessage").textContent = "Account created. Check your email if confirmation is required, then sign in.";
+      setAuthMode("login");
+      return;
+    }
+
+    setSession(result);
+    $("authMessage").textContent = "Signed in successfully.";
+    showAuthenticated();
+  } catch (error) {
+    $("authMessage").textContent = error instanceof Error ? error.message : "Authentication failed.";
+  } finally {
+    $("authSubmit").disabled = false;
+  }
+}
+
+function setAuthMode(mode) {
+  state.authMode = mode;
+  const login = mode === "login";
+  $("authTitle").textContent = login ? "Sign in to Supportable" : "Create a Supportable account";
+  $("authSubmit").textContent = login ? "Sign in" : "Create account";
+  $("authMode").textContent = login ? "Create account" : "Already have an account";
+  $("password").autocomplete = login ? "current-password" : "new-password";
+  $("authMessage").textContent = "";
+}
+
+function showAuthenticated() {
+  $("authPanel").hidden = true;
+  $("requestPanel").hidden = false;
+  $("status").textContent = "Signed in";
+}
+
+function showUnauthenticated() {
+  $("authPanel").hidden = false;
+  $("requestPanel").hidden = true;
+  $("status").textContent = "Sign in required";
 }
 
 async function loadContext() {
@@ -39,28 +144,86 @@ async function submit() {
     $("message").textContent = "Please describe what you need help with.";
     return;
   }
+  if (!state.session?.access_token) {
+    showUnauthenticated();
+    return;
+  }
 
-  const request = {
-    type: $("type").value,
-    description,
-    context: {
-      url: state.tab?.url || null,
-      title: state.tab?.title || null,
-      selectedText: state.selectedText || null
-    },
-    capturedAt: new Date().toISOString()
-  };
+  $("submit").disabled = true;
+  $("message").textContent = "Submitting...";
 
-  await chrome.storage.local.set({ pendingSupportRequest: request });
+  try {
+    const authHeaders = { Authorization: `Bearer ${state.session.access_token}` };
+    const accountResponse = await supabaseFetch(
+      `/rest/v1/participant_accounts?auth_user_id=eq.${encodeURIComponent(state.session.user.id)}&select=participant_id`,
+      { headers: authHeaders }
+    );
+    const accounts = await accountResponse.json();
+    if (!accountResponse.ok || !accounts[0]) throw new Error("Your Supportable account is not linked to a participant yet.");
 
-  const encoded = encodeRequest(request);
-  const url = `${SUPPORTABLE_URL}#support-request=${encodeURIComponent(encoded)}`;
-  await chrome.tabs.create({ url });
+    const applicationResponse = await supabaseFetch(
+      "/rest/v1/applications?name=eq.Supportable&select=id",
+      { headers: authHeaders }
+    );
+    const applications = await applicationResponse.json();
+    if (!applicationResponse.ok || !applications[0]) throw new Error("Supportable application record was not found.");
 
-  $("status").textContent = "Sent to Supportable";
-  $("message").textContent = "Supportable opened with your captured request.";
+    const requestType = $("type").value === "problem"
+      ? "bug"
+      : $("type").value === "feature"
+        ? "feature"
+        : $("type").value === "question"
+          ? "question"
+          : "support";
+
+    const request = {
+      title: description.split("\n")[0].slice(0, 200),
+      description,
+      request_type: requestType,
+      application_id: applications[0].id,
+      requester_id: accounts[0].participant_id,
+      originating_url: state.tab?.url || null
+    };
+
+    const response = await supabaseFetch("/rest/v1/support_requests", {
+      method: "POST",
+      headers: { ...authHeaders, Prefer: "return=representation" },
+      body: JSON.stringify(request)
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || data.hint || "Unable to create the support request.");
+
+    await chrome.storage.local.remove("pendingSupportRequest");
+    $("message").textContent = `Request created: ${data[0].id}`;
+    $("request").value = "";
+  } catch (error) {
+    console.error(error);
+    $("message").textContent = error instanceof Error ? error.message : "Unable to create the support request.";
+  } finally {
+    $("submit").disabled = false;
+  }
 }
 
+async function signOut() {
+  if (state.session?.access_token) {
+    await supabaseFetch("/auth/v1/logout", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${state.session.access_token}` }
+    }).catch(() => {});
+  }
+  setSession(null);
+  showUnauthenticated();
+  $("authMessage").textContent = "Signed out.";
+}
+
+$("authSubmit").addEventListener("click", authenticate);
+$("authMode").addEventListener("click", () => setAuthMode(state.authMode === "login" ? "signup" : "login"));
 $("submit").addEventListener("click", submit);
-$("options").addEventListener("click", () => chrome.runtime.openOptionsPage());
-loadContext();
+$("signOut").addEventListener("click", signOut);
+
+(async function init() {
+  await loadContext();
+  const session = await restoreSession();
+  if (session) showAuthenticated();
+  else showUnauthenticated();
+})();
