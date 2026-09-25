@@ -73,6 +73,6 @@ export async function listSupportRequests(): Promise<SupportRequest[]> {
 
 export async function deleteSupportRequests(ids: string[]): Promise<void> {
   if (!ids.length) return;
-  const { error } = await supabase.from("support_requests").delete().in("id", ids);
+  const { error } = await supabase.from("sup_support_requests").delete().in("id", ids);
   if (error) throw error;
 }
