@@ -30,8 +30,8 @@ type RequestRow = {
   recording_visibility: "private" | "public";
   created_at: string;
   application: { name: string } | null;
-  requester: { name: string } | null;
-  assigned: { name: string } | null;
+  requester: { display_name: string } | null;
+  assigned: { display_name: string } | null;
 };
 
 const statusMap: Record<string, RequestStatus> = {
@@ -43,12 +43,12 @@ const typeMap: Record<string, RequestType> = {
 
 export async function listSupportRequests(): Promise<SupportRequest[]> {
   const { data, error } = await supabase
-    .from("support_requests")
+    .from("sup_support_requests")
     .select(`
       id, title, status, request_type, bounty_amount, recording_url, recording_visibility, created_at,
-      application:applications!support_requests_application_id_fkey(name),
-      requester:participants!support_requests_requester_id_fkey(name),
-      assigned:participants!support_requests_assigned_participant_id_fkey(name)
+      application:sup_applications!sup_support_requests_application_id_fkey(name),
+      requester:participants!sup_support_requests_requester_id_fkey(display_name),
+      assigned:participants!sup_support_requests_assigned_participant_id_fkey(display_name)
     `)
     .order("created_at", { ascending: false });
 
@@ -60,11 +60,11 @@ export async function listSupportRequests(): Promise<SupportRequest[]> {
     status: statusMap[row.status] ?? "Open",
     type: typeMap[row.request_type] ?? "Other",
     application: row.application?.name ?? "Unknown application",
-    requester: row.requester?.name ?? "Unknown participant",
+    requester: row.requester?.display_name ?? "Unknown participant",
     bounty: Number(row.bounty_amount) || 0,
     compensation: Number(row.bounty_amount) > 0 ? "Bounty" : "Free",
     createdAt: row.created_at,
-    assignedTo: row.assigned?.name ?? null,
+    assignedTo: row.assigned?.display_name ?? null,
     recording: Boolean(row.recording_url),
     recordingPublic: row.recording_visibility === "public",
     recordingUrl: row.recording_url,
