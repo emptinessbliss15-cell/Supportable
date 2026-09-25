@@ -88,13 +88,14 @@ function App() {
     const description = intent.trim(); if (!description || !user) return;
     setCreating(true); setMessage("");
     try {
-      const { data: account, error: accountError } = await supabase.from("participant_accounts").select("participant_id").eq("auth_user_id", user.id).single();
-      if (accountError) throw accountError;
-      const { data: application, error: applicationError } = await supabase.from("applications").select("id").eq("name", "Supportable").single();
+      const { data: participantId, error: participantError } = await supabase.rpc("eb_current_participant_id");
+      if (participantError) throw participantError;
+      if (!participantId) throw new Error("No active eBliss participant is linked to this account.");
+      const { data: application, error: applicationError } = await supabase.from("sup_applications").select("id").eq("name", "Supportable").single();
       if (applicationError) throw applicationError;
       const amount = newBounty.trim() ? Number(newBounty) : null;
       if (amount !== null && (!Number.isFinite(amount) || amount < 0)) throw new Error("Bounty must be a valid non-negative amount.");
-      const { data, error } = await supabase.from("support_requests").insert({ title: description.split("\n")[0].slice(0, 200), description, request_type: newType, application_id: application.id, requester_id: account.participant_id, bounty_amount: amount, bounty_currency: amount === null ? null : newBountyCurrency }).select("id").single();
+      const { data, error } = await supabase.from("sup_support_requests").insert({ title: description.split("\n")[0].slice(0, 200), description, request_type: newType, application_id: application.id, requester_id: participantId, bounty_amount: amount ?? 0, bounty_currency: newBountyCurrency }).select("id").single();
       if (error) throw error;
       setMessage(`Request created: ${data.id}`); setIntent(""); setNewBounty(""); await loadRequests(); setView("requests"); setActiveTab("Requests");
     } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to create the request."); }
